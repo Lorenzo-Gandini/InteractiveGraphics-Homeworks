@@ -6,7 +6,4 @@
 
 - HW1 : ComposingImages
 - HW2 : Transformation
-- HW3 :
-- HW4 :
-- HW5 :
-- HW6 :
+- HW3 : TriangularMesh
