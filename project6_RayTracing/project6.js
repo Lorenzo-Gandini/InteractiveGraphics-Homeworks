@@ -40,9 +40,25 @@ vec3 Shade( Material mtl, vec3 position, vec3 normal, vec3 view )
 {
 	vec3 color = vec3(0,0,0);
 	for ( int i=0; i<NUM_LIGHTS; ++i ) {
-		// TO-DO: Check for shadows
-		// TO-DO: If not shadowed, perform shading using the Blinn model
-		color += mtl.k_d * lights[i].intensity;	// change this line
+		// Check for shadows
+		vec3 lightDir = normalize(lights[i].position - position);
+		float lightDist = distance(lights[i].position, position);
+		
+		Ray shadowRay;
+		shadowRay.pos = position + normal * 0.001; // Offset to avoid self-intersection
+		shadowRay.dir = lightDir;
+		
+		HitInfo shadowHit;
+		bool shadowed = IntersectRay(shadowHit, shadowRay) && shadowHit.t < lightDist;
+		
+		if (!shadowed) {
+			// Perform shading using the Blinn model
+			float diffuse = max(dot(normal, lightDir), 0.0);
+			vec3 halfVec = normalize(lightDir + view);
+			float specular = pow(max(dot(normal, halfVec), 0.0), mtl.n);
+			
+			color += (mtl.k_d * diffuse + mtl.k_s * specular) * lights[i].intensity;
+		}
 	}
 	return color;
 }
@@ -56,8 +72,24 @@ bool IntersectRay( inout HitInfo hit, Ray ray )
 	hit.t = 1e30;
 	bool foundHit = false;
 	for ( int i=0; i<NUM_SPHERES; ++i ) {
-		// TO-DO: Test for ray-sphere intersection
-		// TO-DO: If intersection is found, update the given HitInfo
+		// Test for ray-sphere intersection
+		vec3 oc = ray.pos - spheres[i].center;
+		float a = dot(ray.dir, ray.dir);
+		float b = 2.0 * dot(oc, ray.dir);
+		float c = dot(oc, oc) - spheres[i].radius * spheres[i].radius;
+		float discriminant = b * b - 4.0 * a * c;
+		
+		if (discriminant > 0.0) {
+			float t = (-b - sqrt(discriminant)) / (2.0 * a);
+			if (t > 0.0 && t < hit.t) {
+				// Update hit info
+				hit.t = t;
+				hit.position = ray.pos + ray.dir * t;
+				hit.normal = normalize(hit.position - spheres[i].center);
+				hit.mtl = spheres[i].mtl;
+				foundHit = true;
+			}
+		}
 	}
 	return foundHit;
 }
@@ -80,13 +112,21 @@ vec4 RayTracer( Ray ray )
 			Ray r;	// this is the reflection ray
 			HitInfo h;	// reflection hit info
 			
-			// TO-DO: Initialize the reflection ray
+			// Initialize the reflection ray
+			r.pos = hit.position + hit.normal * 0.001; // Offset to avoid self-intersection
+			r.dir = reflect(ray.dir, hit.normal);
 			
-			if ( IntersectRay( h, r ) ) {
-				// TO-DO: Hit found, so shade the hit point
-				// TO-DO: Update the loop variables for tracing the next reflection ray
+			if ( IntersectRay( h, r ) ){
+				// Hit found, so shade the hit point
+				vec3 v = normalize(-r.dir);
+				clr += k_s * Shade(h.mtl, h.position, h.normal, v);
+				
+				// Update the loop variables for tracing the next reflection ray
+				k_s *= h.mtl.k_s;
+				hit = h;
+				ray = r;
 			} else {
-				// The refleciton ray did not intersect with anything,
+				// The reflection ray did not intersect with anything,
 				// so we are using the environment color
 				clr += k_s * textureCube( envMap, r.dir.xzy ).rgb;
 				break;	// no more reflections
